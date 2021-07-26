@@ -20,18 +20,56 @@ domains = ['https://www.youtube.com/', 'http://www.youtube.com/', 'https://youtu
 async def check_domains(link):
 	for x in domains:
 		if link.startswith(x):
-			return true
-	return false
+			return True
+	return False
+
+@bot.command()
+async def stream(ctx, *, command = None):
+	"""Воспроизводит трек с youtube по ссылке. Загрузка не производится."""
+	global server, server_id, name_channel
+	author = ctx.author
+	if command is None:
+		await ctx.channel.send(f'{author.mention}, команда некорректна!')
+		return
+	params = command.split(' ')
+	ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+
+	ydl_opts = {'format': 'bestaudio/best', 'noplaylist':'True'}
+
+	server = ctx.guild
+	name_channel = author.voice.channel.name
+	voice_channel = discord.utils.get(server.voice_channels, name = name_channel)
+	voice = discord.utils.get(bot.voice_clients, guild = server)
+
+	print(f'{voice}')
+	if voice is None:
+		await voice_channel.connect()
+		voice = discord.utils.get(bot.voice_clients, guild = server)
+	print(f'{voice}')
+	url = params[0]
+
+	with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+		info = ydl.extract_info(url, download=False)
+		i_url = info['formats'][0]['url']
+		source = await discord.FFmpegOpusAudio.from_probe(i_url, **ffmpeg_opts)
+		voice.play(source)
 
 @bot.command()
 async def play(ctx, *, command = None):
-	"""Воспроизводит музыку с youtube по ссылке."""
+	"""Воспроизводит трек с youtube по ссылке. Загрузка производится."""
+
 	global server, server_id, name_channel
 	author = ctx.author
-	if command == None:
+	if command is None:
 		server = ctx.guild
 		name_channel = author.voice.channel.name
 		voice_channel = discord.utils.get(server.voice_channels, name = name_channel)
+		voice = discord.utils.get(bot.voice_clients, guild = server)
+		if voice is None:
+			await voice_channel.connect()
+			voice = discord.utils.get(bot.voice_clients, guild = server)
+		voice.play(discord.FFmpegPCMAudio('song.mp3'))
+		return
 	params = command.split(' ')
 	if len(params) == 1:
 		source = params[0]
@@ -61,18 +99,23 @@ async def play(ctx, *, command = None):
 	if voice is None:
 		await voice_channel.connect()
 		voice = discord.utils.get(bot.voice_clients, guild = server)
-	print ('voice is ok!')
+
 	if source is None:
+		if voice.is_playing():
+			voice.stop()
 		voice.play(discord.FFmpegPCMAudio('song.mp3'))
 
 	elif source.startswith('http'):
 		if not check_domains(source):
 			await ctx.channel.send(f'{author.mention} ссылка запрещена')
 			return
+
 		song_there = os.path.isfile('song.mp3')
+
 		try:
 			if song_there:
 				os.remove('song.mp3')
+
 		except PermissionError:
 			await ctx.channel.send('Недостаточно прав для удаления')
 			return
@@ -95,21 +138,36 @@ async def play(ctx, *, command = None):
 				file_copy = file
 				file_copy = ''.join(file_copy.split())
 				print(f'{file_copy}')
-				shutil.copyfile(f'{file}', f'music/{file_copy}')
+				shutil.copyfile(f'{file}', f'playlists/music/{file_copy}')
 				os.rename(file, 'song.mp3')
+		if voice.is_playing():
+			voice.stop()
 		voice.play(discord.FFmpegPCMAudio('song.mp3'))
 	else:
-		for track in os.listdir('music/'):
+		for track in os.listdir('playlists/music/'):
 			if track.endswith('mp3') and track.startswith(f'{source}'):
-				voice.play(discord.FFmpegPCMAudio(f'music/{track}'))
+				if voice.is_playing():
+					voice.stop()
+				voice.play(discord.FFmpegPCMAudio(f'playlists/music/{track}'))
+				return
 
 @bot.command()
-async def list(ctx):
+async def showlist(ctx, *, command = None):
 	"""Выводит список сохраненных треков"""
-	voice = discord.utils.get(bot.voice_clients, guild = server)
-	i = 0
-	for track in os.listdir('music/'):
-		await ctx.channel.send(f'{track}')
+	if command is None:
+		for track in os.listdir('playlists/music/'):
+			await ctx.channel.send(f'{track}')
+		return
+	params = command.split(' ')
+	if len(params) == 1:
+		source = params[0]
+		for playlist in os.listdir('playlists/'):
+			if playlist.startswith(f'{source}'):
+				for track in os.listdir(f'playlists/{playlist}'):
+					if track.endswith('.mp3'):
+						await ctx.channel.send(f'{track}')
+	else:
+		await ctx.channel.send(f'{ctx.author}, команда некорректна.')
 
 @bot.command()
 async def leave(ctx):
