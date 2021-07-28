@@ -1,22 +1,150 @@
 # -*- coding: utf-8 -*-
-
-import discord
-from discord.ext import commands
-from config import token
-
+import time
+import asyncio
 import youtube_dl
 import os
 import shutil
+import discord
+from discord.ext import commands
+from config import token
+from queue import Queue
 
-bot = commands.Bot(command_prefix='!')
+queue_size = 0
+
+num_stream = 0
+
+ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+
+ydl_opts = {'format': 'bestaudio/best'}
+
+current_playlist = Queue()
+
+bot = commands.Bot(command_prefix='!', case_insensitive=True)
+
+server, server_id, name_channel = None, None, None
+
+badwords = ['nigger']
+
+domains = ['https://www.youtube.com/', 'http://www.youtube.com/', 'https://youtu.be/', 'http://youtu.be/']
+
+@bot.event
+async def on_message(message):
+	print('processing1')
+	author = message.author
+	#await message.channel.send(f"{message.author.mention}, done!")
+	'''for i in domains:
+		if i in message.content:
+			#await message.delete()
+			global server, server_id, name_channel
+			print(message)
+			#if command is None:
+			#	await message.channel.send(f'{author.mention}, команда некорректна!')
+			#	return
+			params = message.content.split(' ')
+
+			server = message.guild
+			name_channel = author.voice.channel.name
+			voice_channel = discord.utils.get(server.voice_channels, name = name_channel)
+			voice = discord.utils.get(bot.voice_clients, guild = server)
+
+			if voice is None:
+				await voice_channel.connect()
+				voice = discord.utils.get(bot.voice_clients, guild = server)
+
+			voice = discord.utils.get(bot.voice_clients, guild = server)
+
+			url = params[1]
+
+			with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+				info = ydl.extract_info(url, download=False)
+				i_url = info['formats'][0]['url']
+				dur = info['duration']
+				print(dur)
+				source = await discord.FFmpegOpusAudio.from_probe(i_url, **ffmpeg_opts)
+				if voice.is_playing():
+					current_playlist.put(source)
+					return
+
+			current_playlist.put(source)
+			print(voice.is_playing())
+			if not voice.is_playing() and not current_playlist.empty():
+				await bot.process_commands(message)
+				print('ended')
+			return'''
+	for i in badwords: # Go through the list of bad words;
+		if i in message.content:
+			await message.delete()
+			await message.channel.send(f"{message.author.mention}, материться можно только на русском!")
+			bot.dispatch('prof', message, i)
+			return # So that it doesn't try to delete the message again, which will cause an error.
+	if '!stop' in message.content:
+		await message.delete()
+		#await message.channel.send('')
+		await bot.process_commands(message)
+		return
+	#if not author == bot.user:
+	#	await message.channel.send(f'{message.author.mention}, некорректный домен.')
+	await bot.process_commands(message)
+
+@bot.event
+async def on_prof(ctx, word, *, command=None):
+	print('processing2')
+	#channel = bot.get_channel(message.channel) # for me it's bot.get_channel(817421787289485322)
+	embed = discord.Embed(title="Profanity Alert!",description=f"{ctx.author.name} just said ||{word}||", color=discord.Color.blurple()) # Let's make an embed!
+	#print(channel)
+	await ctx.channel.send(embed=embed)
+
 
 @bot.event
 async def on_ready():
 	print('Bot online!')
+	global server, server_id, name_channel
+	print(server)
+	print(server_id)
+	print(name_channel)
+	time.sleep(1)
+	voice = discord.utils.get(bot.voice_clients, guild = server)
+	if not voice is None and not voice.is_playing() and not current_playlist.empty():
+		await bot.process_commands(current_playlist.get())
+		print('ended')
 
-server, server_id, name_channel = None, None, None
+def next(ctx, parent_idx):
+	print('next started')
+	print(f'next : {os.getpid()}')
+	global queue_size, num_stream
+	voice = discord.utils.get(bot.voice_clients, guild = server)
+	print(voice)
+	print(voice.is_playing())
+	print(current_playlist.qsize())
+	print(f'parent_idx = {parent_idx}, num_stream = {num_stream}')
+	'''if not parent_idx == num_stream:
+		print('side process')
+		return'''
+	time.sleep(1)
+	print(1)
+	print(2)
+	queue_size = current_playlist.qsize()
+	print(3)
+	print(voice)
+	print(voice.is_playing())
+	print(current_playlist.qsize())
+	if not voice is None and not voice.is_playing() and not current_playlist.empty():
+		print(4)
+		source = current_playlist.get()
+		print(source)
+		num_stream += 1
+		print(5)
+		try:
+			voice.play(source, after = lambda e : next(ctx, parent_idx + 1))#
+		except discord.ClientException:
+			print('Audio is already playing!')
+			voice.stop()
+			voice.play(source, after = lambda e : next(ctx, parent_idx + 1))
+		print(6)
+		return
 
-domains = ['https://www.youtube.com/', 'http://www.youtube.com/', 'https://youtu.be/', 'http://youtu.be/']
+	print('next finished with error')
+
 async def check_domains(link):
 	for x in domains:
 		if link.startswith(x):
@@ -26,7 +154,8 @@ async def check_domains(link):
 @bot.command()
 async def stream(ctx, *, command = None):
 	"""Воспроизводит трек с youtube по ссылке. Загрузка не производится."""
-	global server, server_id, name_channel
+	print(f'stream : {os.getpid()}')
+	global server, server_id, name_channel, queue_size, num_stream
 	author = ctx.author
 	if command is None:
 		await ctx.channel.send(f'{author.mention}, команда некорректна!')
@@ -34,26 +163,52 @@ async def stream(ctx, *, command = None):
 	params = command.split(' ')
 	ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
-	ydl_opts = {'format': 'bestaudio/best', 'noplaylist':'True'}
+	ydl_opts = {'format': 'bestaudio/best'}
 
 	server = ctx.guild
 	name_channel = author.voice.channel.name
 	voice_channel = discord.utils.get(server.voice_channels, name = name_channel)
 	voice = discord.utils.get(bot.voice_clients, guild = server)
 
-	print(f'{voice}')
 	if voice is None:
 		await voice_channel.connect()
 		voice = discord.utils.get(bot.voice_clients, guild = server)
-	print(f'{voice}')
+	voice = discord.utils.get(bot.voice_clients, guild = server)
+	
+	#voice.stop()
 	url = params[0]
 
 	with youtube_dl.YoutubeDL(ydl_opts) as ydl:
 		info = ydl.extract_info(url, download=False)
+		#print(info)
 		i_url = info['formats'][0]['url']
+		dur = info['duration']
+		#print(dur)
 		source = await discord.FFmpegOpusAudio.from_probe(i_url, **ffmpeg_opts)
-		voice.play(source)
+		if voice.is_playing():
+			current_playlist.put(source)
+			queue_size = current_playlist.qsize()
+			num_stream += 1
+			return
+		
+		voice.play(source, after = lambda e : next(ctx, num_stream))
 
+'''
+	with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+		result = ydl.extract_info(url, download=False)
+
+
+	if 'entries' in result:
+		# Can be a playlist or a list of videos
+		video = result['entries'][0]
+	else:
+		# Just a video
+		video = result
+
+	print(video)
+	video_url = video['url']
+	print(video_url)
+'''
 @bot.command()
 async def play(ctx, *, command = None):
 	"""Воспроизводит трек с youtube по ссылке. Загрузка производится."""
