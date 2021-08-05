@@ -318,4 +318,8 @@ async def stop(ctx):
 	current_playlist_titles = Queue()
 	voice.stop()
 
+@bot.command()
+async def quit():
+	exit(0)
+
 bot.run(token)
