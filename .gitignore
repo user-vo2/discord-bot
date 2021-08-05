@@ -1,0 +1,11 @@
+config.py
+git_integration.py
+test_key
+test_key.pub
+__pycache__/
+dist/
+playlists/
+build/
+*.spec
+.idea/
+song.mp3
