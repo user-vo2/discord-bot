@@ -319,7 +319,8 @@ async def stop(ctx):
 	voice.stop()
 
 @bot.command()
-async def quit():
+async def quit(ctx):
+	await ctx.channel.send('Выключаюсь')
 	exit(0)
 
 bot.run(token)
