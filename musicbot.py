@@ -24,27 +24,18 @@ bot = commands.Bot(command_prefix='!', case_insensitive=True)
 
 server, server_id, name_channel = None, None, None
 
-badwords = ['nigger']
-
 domains = ['https://www.youtube.com/', 'http://www.youtube.com/', 'https://youtu.be/', 'http://youtu.be/']
+
+removable_commands = ['!stop', '!skip', '!song', '!quit']
 
 @bot.event
 async def on_message(message):
 	author = message.author
-	for i in badwords:  # Go through the list of bad words;
-		if i in message.content:
+	for current_command in removable_commands:
+		if current_command in message.content: 
 			await message.delete()
-			bot.dispatch('prof', message, i)
-			return  # So that it doesn't try to delete the message again, which will cause an error.
-	if '!stop' in message.content or '!skip' in message.content or '!song' in message.content or '!pause' in message.content or '!resume' in message.content:
-		await message.delete()
-		print('deleted')
+			print('message deleted')
 	await bot.process_commands(message)
-
-@bot.event
-async def on_prof(ctx, word, *, command=None):
-	embed = discord.Embed(title="Profanity Alert!",description=f"{ctx.author.name} just said ||{word}||", color=discord.Color.blurple()) # Let's make an embed!
-	await ctx.channel.send(embed=embed)
 
 
 @bot.event
@@ -62,7 +53,6 @@ def next(ctx):
 	if not voice is None and not voice.is_playing() and not current_playlist.empty():
 		source = current_playlist.get()
 		track = current_playlist_titles.get()
-
 		try:
 			voice.play(source, after=lambda e: next(ctx))
 		except discord.ClientException:
@@ -91,11 +81,10 @@ async def stream(ctx, *, command = None):
 	params = command.split(' ')
 	ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
-	ydl_opts = {'format': 'bestaudio/best'}
-
 	server = ctx.guild
-	voice = discord.utils.get(bot.voice_clients, guild=server)
-	voice_channel = discord.utils.get(server.voice_channels, id=616285165328662601)
+	name_channel = author.voice.channel.name
+	voice_channel = discord.utils.get(server.voice_channels, name = name_channel)
+	voice = discord.utils.get(bot.voice_clients, guild = server)
 
 	if voice is None:
 		await voice_channel.connect()
@@ -103,51 +92,46 @@ async def stream(ctx, *, command = None):
 
 	url = params[0]
 
-	with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-		info = ydl.extract_info(url, download=False)
-		
-		if 'entries' in info:
-			playlist_title_info = info['entries'][0]['playlist_title']
-			msg = f'Плейлист \"{playlist_title_info}\" загружен. В этом плейлисте присутствуют треки:\n'
-			msg_old = msg
-			counter = 1
-			for video in info['entries']:
-				track_item = video['title']
-				msg_old = msg
-				msg += f'{counter}.\"{track_item}\"\n'
-				if len(msg) > MAX_LEN:
-					await ctx.channel.send(msg_old)
-					msg = f'{counter}.\"{track_item}\"\n'
-				counter += 1
-			if voice is None:
-				await voice_channel.connect()
-			voice = discord.utils.get(bot.voice_clients, guild=server)
+	standart_ydl_opts = {
+		'format': 'bestaudio/best',
+		'playlist_items': '1',
+		'age_limit': '23',
+		'ignore_errors': True,
+	}
+	playlist_ydl_opts = standart_ydl_opts
+	info = youtube_dl.YoutubeDL(standart_ydl_opts).extract_info(url, download = False)
 
-			await ctx.channel.send(msg)
-			for video in info['entries']:
-				i_url = video['formats'][0]['url']
-				current_playlist_titles.put(video['title'])
-				source = await discord.FFmpegOpusAudio.from_probe(i_url, **ffmpeg_opts)
-				current_playlist.put(source)
-				print(video['title'])
-				if voice is None:
-					await voice_channel.connect()
-				voice = discord.utils.get(bot.voice_clients, guild=server)				
-				if not voice.is_playing():
-					track = current_playlist_titles.get()
-					time.sleep(1)
-					voice.play(current_playlist.get(), after=lambda e: next(ctx))
-		else:
-			title_info = info['title']
-			await ctx.channel.send(f'Трек \"{title_info}\" загружен.')
-			i_url = info['formats'][0]['url']
+	if info['webpage_url_basename'] == 'playlist':
+		print('it\'s whole playlist!')
+		i = 1
+		while not len(info['entries']) == 0:
+			print(info['entries'][0]['title'])
+			
+			title_info = info['entries'][0]['title']
+			i_url = info['entries'][0]['formats'][0]['url']
 			source = await discord.FFmpegOpusAudio.from_probe(i_url, **ffmpeg_opts)
 			current_playlist.put(source)
 			current_playlist_titles.put(title_info)
-			if not voice.is_playing():
+			if not voice.is_playing() and not voice.is_paused():
 				track = current_playlist_titles.get()
-				time.sleep(1)
 				voice.play(current_playlist.get(), after=lambda e: next(ctx))
+			i += 1
+			playlist_ydl_opts['playlist_items'] = str(i)
+			try:
+				info = youtube_dl.YoutubeDL(playlist_ydl_opts).extract_info(url, download = False)
+			except youtube_dl.utils.DownloadError:
+				i += 1
+				continue
+	else:
+		print('it\'s just one video')
+		title_info = info['title']
+		i_url = info['formats'][0]['url']
+		source = await discord.FFmpegOpusAudio.from_probe(i_url, **ffmpeg_opts)
+		current_playlist.put(source)
+		current_playlist_titles.put(title_info)
+		if not voice.is_playing() and not voice.is_paused():
+			track = current_playlist_titles.get()
+			voice.play(current_playlist.get(), after=lambda e: next(ctx))
 
 @bot.command()
 async def skip(ctx):
@@ -287,6 +271,7 @@ async def leave(ctx):
 	global server, name_channel
 	voice = discord.utils.get(bot.voice_clients, guild = server)
 	if voice.is_connected():
+		await stop(ctx)
 		await voice.disconnect()
 	else:
 		await ctx.channel.send(f'{ctx.author.mention}, бот уже не сидит в войсе.')
@@ -307,20 +292,22 @@ async def resume(ctx):
 	if voice.is_paused():
 		voice.resume()
 	else:
-		await ctx.channel.send(f'{ctx.author.mention}, Трек не загружен или музыка уже играет.')
+		await ctx.channel.send(f'{ctx.author.mention}, трек не загружен или музыка уже играет.')
 
 @bot.command()
 async def stop(ctx):
 	"""Останавливает воспроизведение музыки."""
-	global current_playlist, current_playlist_titles
+	global current_playlist, current_playlist_titles, track
 	voice = discord.utils.get(bot.voice_clients, guild=server)
 	current_playlist = Queue()
 	current_playlist_titles = Queue()
+	track = ''
 	voice.stop()
 
 @bot.command()
 async def quit(ctx):
-	await ctx.channel.send('Выключаюсь')
+	"""Выключает бота"""
+	await ctx.channel.send('Отключаюсь, мой господин.')
 	exit(0)
 
 bot.run(token)
