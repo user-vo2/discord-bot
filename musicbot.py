@@ -11,6 +11,11 @@ from colorama import init
 
 init()
 
+'''
+	Commands !play and !showlist were never updated since first commit
+	and may not work properly
+'''
+
 ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 ydl_opts = {'format': 'bestaudio/best'}
