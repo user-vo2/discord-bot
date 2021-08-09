@@ -9,3 +9,4 @@ build/
 *.spec
 .idea/
 song.mp3
+youtubelibtest.py
