@@ -11,15 +11,6 @@ from colorama import init
 
 init()
 
-'''
-	Commands !play and !showlist were never updated since first commit
-	and may not work properly
-'''
-
-ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-
-ydl_opts = {'format': 'bestaudio/best'}
-
 MAX_LEN = 2000
 current_playlist = Queue()
 current_playlist_titles = Queue()
@@ -46,12 +37,12 @@ async def on_message(message):
 @bot.event
 async def on_ready():
 	print('Bot online!')
-	global server, server_id, name_channel
-	print(server)
-	print(server_id)
-	print(name_channel)
 
 def next(ctx):
+	'''
+	sync autoplay function
+	needs async rework in order to increase functionality(reporting when new song start playing, when queue is empty, etc)
+	'''
 	global track, current_playlist_titles, current_playlist
 	voice = discord.utils.get(bot.voice_clients, guild=server)
 	time.sleep(1)
@@ -70,6 +61,9 @@ def next(ctx):
 
 
 async def check_domains(link):
+	'''
+	checks link if it cannot be processed with yuotubedl methods
+	'''
 	for x in domains:
 		if link.startswith(x):
 			return True
@@ -104,8 +98,9 @@ async def stream(ctx, *, command = None):
 		'ignore_errors': True,
 	}
 	playlist_ydl_opts = standart_ydl_opts
+	#info about first track in given link
 	info = youtube_dl.YoutubeDL(standart_ydl_opts).extract_info(url, download=False)
-
+	#now differentiating playlist and single track
 	if info['webpage_url_basename'] == 'playlist':
 		print('it\'s whole playlist!')
 		i = 1
