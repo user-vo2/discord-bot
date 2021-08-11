@@ -27,6 +27,8 @@ removable_commands = ['!stop', '!skip', '!song', '!quit']
 @bot.event
 async def on_message(message):
 	author = message.author
+	if not message.channel.id == 616285165311885374:
+		return
 	for current_command in removable_commands:
 		if current_command in message.content: 
 			await message.delete()
@@ -81,7 +83,7 @@ async def stream(ctx, *, command = None):
 	ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 	server = ctx.guild
-	name_channel = author.voice.channel.name
+	name_channel = 'Трактиръ'
 	voice_channel = discord.utils.get(server.voice_channels, name=name_channel)
 	voice = discord.utils.get(bot.voice_clients, guild=server)
 
