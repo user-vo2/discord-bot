@@ -5,9 +5,10 @@ import os
 import shutil
 import discord
 from discord.ext import commands
-from config import token
+from config import token, channel_id, voice_name
 from queue import Queue
 from colorama import init
+from discordTogether import DiscordTogether
 
 init()
 
@@ -24,10 +25,13 @@ domains = ['https://www.youtube.com/', 'http://www.youtube.com/', 'https://youtu
 
 removable_commands = ['!stop', '!skip', '!song', '!quit']
 
+togetherControl = DiscordTogether(bot)
+
 @bot.event
 async def on_message(message):
+	global channel_id
 	author = message.author
-	if not message.channel.id == 616285165311885374:
+	if not message.channel.id == channel_id:
 		return
 	for current_command in removable_commands:
 		if current_command in message.content: 
@@ -72,9 +76,15 @@ async def check_domains(link):
 	return False
 
 @bot.command()
+async def ytstream(ctx):
+	'''Открывает канал для просмотра youtube.'''
+	link = await togetherControl.create_link(ctx.author.voice.channel.id, 'youtube')
+	await ctx.send(f"Чтобы открыть youtube together, нажмите на синюю ссылку!\n{link}")
+
+@bot.command()
 async def stream(ctx, *, command = None):
 	"""Воспроизводит трек или плейлист с youtube по ссылке. Загрузка не производится."""
-	global server, server_id, name_channel, current_playlist, current_playlist_titles, track
+	global server, server_id, name_channel, current_playlist, current_playlist_titles, track, voice_name
 	author = ctx.author
 	if command is None:
 		await ctx.channel.send(f'{author.mention}, команда некорректна!')
@@ -83,8 +93,7 @@ async def stream(ctx, *, command = None):
 	ffmpeg_opts = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 	server = ctx.guild
-	name_channel = 'Трактиръ'
-	voice_channel = discord.utils.get(server.voice_channels, name=name_channel)
+	voice_channel = discord.utils.get(server.voice_channels, name=voice_name)
 	voice = discord.utils.get(bot.voice_clients, guild=server)
 
 	if voice is None:
