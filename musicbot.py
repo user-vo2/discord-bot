@@ -8,7 +8,6 @@ from discord.ext import commands
 from config import token, channel_id, voice_name
 from queue import Queue
 from colorama import init
-from discordTogether import DiscordTogether
 
 init()
 
@@ -21,11 +20,7 @@ bot = commands.Bot(command_prefix='!', case_insensitive=True)
 
 server, server_id, name_channel = None, None, None
 
-domains = ['https://www.youtube.com/', 'http://www.youtube.com/', 'https://youtu.be/', 'http://youtu.be/']
-
-removable_commands = ['!stop', '!skip', '!song', '!quit']
-
-togetherControl = DiscordTogether(bot)
+removable_commands = ['!stop', '!skip', '!song', '!quit', '!pause', '!resume']
 
 @bot.event
 async def on_message(message):
@@ -64,22 +59,6 @@ def next(ctx):
 			return
 	if current_playlist.empty():
 		print('playlist is empty')
-
-
-async def check_domains(link):
-	'''
-	checks link if it cannot be processed with yuotubedl methods
-	'''
-	for x in domains:
-		if link.startswith(x):
-			return True
-	return False
-
-@bot.command()
-async def ytstream(ctx):
-	'''Открывает канал для просмотра youtube.'''
-	link = await togetherControl.create_link(ctx.author.voice.channel.id, 'youtube')
-	await ctx.send(f"Чтобы открыть youtube together, нажмите на синюю ссылку!\n{link}")
 
 @bot.command()
 async def stream(ctx, *, command = None):
@@ -175,18 +154,22 @@ async def leave(ctx):
 @bot.command()
 async def pause(ctx):
 	"""Ставит музыку на паузу."""
+	global track
 	voice = discord.utils.get(bot.voice_clients, guild=server)
 	if voice.is_playing():
 		voice.pause()
+		await ctx.channel.send(f'Трек \"{track}\" на паузе.')
 	else:
 		await ctx.channel.send(f'{ctx.author.mention}, музыка не воспроизводится.')
 
 @bot.command()
 async def resume(ctx):
 	"""Продолжает воспроизведение музыки."""
+	global track
 	voice = discord.utils.get(bot.voice_clients, guild=server)
 	if voice.is_paused():
 		voice.resume()
+		await ctx.channel.send(f'Трек \"{track}\" снова играет.')
 	else:
 		await ctx.channel.send(f'{ctx.author.mention}, трек не загружен или музыка уже играет.')
 
@@ -199,6 +182,7 @@ async def stop(ctx):
 	current_playlist_titles = Queue()
 	track = ''
 	voice.stop()
+	await ctx.channel.send(f'Воспроизведение прекращено.')
 
 @bot.command()
 async def quit(ctx):
